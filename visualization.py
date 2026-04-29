@@ -166,10 +166,12 @@ class SimViewer:
 
     # ── Figure layout ────────────────────────────────────────────────────
     def _build_figure(self):
-        self.fig = plt.figure(figsize=(15, 9), facecolor="#0D0D1A")
+        self.fig = plt.figure(figsize=(22, 9), facecolor="#0D0D1A")
         self.fig.suptitle("Earth–Luna Asteroid Impact Simulator",
                           color="white", fontsize=12, y=0.98)
-        self.ax = self.fig.add_axes([0.04, 0.13, 0.55, 0.82])
+
+        # Left: live simulation view
+        self.ax = self.fig.add_axes([0.03, 0.13, 0.40, 0.82])
         self.ax.set_facecolor("#070714")
         self.ax.set_aspect("equal")
         self.ax.set_xlabel("x  [Earth–Luna distances]", color="#888", fontsize=8)
@@ -178,12 +180,22 @@ class SimViewer:
         for sp in self.ax.spines.values():
             sp.set_color("#333")
 
-        self.ax_pol = self.fig.add_axes([0.63, 0.50, 0.34, 0.45],
+        # Centre: full impact-trajectory traces (corotating frame, always)
+        self.ax_traces = self.fig.add_axes([0.46, 0.13, 0.22, 0.82])
+        self.ax_traces.set_facecolor("#070714")
+        self.ax_traces.set_aspect("equal")
+        self.ax_traces.tick_params(colors="#666", labelsize=7)
+        for sp in self.ax_traces.spines.values():
+            sp.set_color("#333")
+
+        # Right-top: Luna impact polar histogram
+        self.ax_pol = self.fig.add_axes([0.71, 0.52, 0.27, 0.43],
                                         projection="polar", facecolor="#070714")
         self.ax_pol.tick_params(colors="#888", labelsize=7)
         self.ax_pol.grid(color="#333", alpha=0.4)
 
-        self.ax_stats = self.fig.add_axes([0.63, 0.13, 0.34, 0.32],
+        # Right-bottom: stats text
+        self.ax_stats = self.fig.add_axes([0.71, 0.13, 0.27, 0.35],
                                           facecolor="#070714")
         self.ax_stats.axis("off")
 
@@ -247,8 +259,8 @@ class SimViewer:
                        labelcolor="white", fontsize=7)
 
     def _build_widgets(self):
-        # Time slider (in days)
-        ax_sl = self.fig.add_axes([0.04, 0.05, 0.55, 0.025],
+        # Time slider (in days) — sits under the live sim panel
+        ax_sl = self.fig.add_axes([0.03, 0.05, 0.40, 0.025],
                                   facecolor="#1A1A2E")
         self.slider = Slider(ax_sl, "t (days)",
                              0.0, self.r.times[-1] / 86400.0,
@@ -257,8 +269,18 @@ class SimViewer:
         self.slider.valtext.set_color("white")
         self.slider.on_changed(self._on_slider)
 
-        # Frame radio
-        ax_fr = self.fig.add_axes([0.62, 0.01, 0.12, 0.10],
+        # Speed slider — sits under the live sim panel (row 2)
+        ax_sp = self.fig.add_axes([0.03, 0.01, 0.32, 0.025],
+                                  facecolor="#1A1A2E")
+        self.speed_slider = Slider(ax_sp, "Speed",
+                                   1, 50, valinit=self._play_step,
+                                   valstep=1, color="#C8C8C8")
+        self.speed_slider.label.set_color("white")
+        self.speed_slider.valtext.set_color("white")
+        self.speed_slider.on_changed(self._on_speed)
+
+        # Frame radio — sits under the traces panel
+        ax_fr = self.fig.add_axes([0.46, 0.01, 0.10, 0.10],
                                   facecolor="#1A1A2E")
         self.radio = RadioButtons(ax_fr, self.FRAMES,
                                   active=self.FRAMES.index(self.frame))
@@ -266,8 +288,8 @@ class SimViewer:
             lbl.set_color("white"); lbl.set_fontsize(7)
         self.radio.on_clicked(self._on_frame)
 
-        # Toggles
-        ax_ck = self.fig.add_axes([0.76, 0.01, 0.12, 0.10],
+        # Toggles — sits to the right of frame radio
+        ax_ck = self.fig.add_axes([0.58, 0.01, 0.11, 0.10],
                                   facecolor="#1A1A2E")
         self.checks = CheckButtons(
             ax_ck, self.TOGGLES,
@@ -278,18 +300,8 @@ class SimViewer:
             lbl.set_color("white"); lbl.set_fontsize(7)
         self.checks.on_clicked(self._on_toggle)
 
-        # Speed slider  (1 – 50 saved-frames per tick)
-        ax_sp = self.fig.add_axes([0.04, 0.01, 0.45, 0.025],
-                                  facecolor="#1A1A2E")
-        self.speed_slider = Slider(ax_sp, "Speed",
-                                   1, 50, valinit=self._play_step,
-                                   valstep=1, color="#C8C8C8")
-        self.speed_slider.label.set_color("white")
-        self.speed_slider.valtext.set_color("white")
-        self.speed_slider.on_changed(self._on_speed)
-
         # Play/pause
-        ax_pl = self.fig.add_axes([0.90, 0.05, 0.07, 0.04])
+        ax_pl = self.fig.add_axes([0.91, 0.05, 0.06, 0.04])
         self.play_btn = Button(ax_pl, "Play", color="#1A1A2E",
                                hovercolor="#2A2A4E")
         self.play_btn.label.set_color("white")
@@ -333,9 +345,10 @@ class SimViewer:
         # Lagrange (only meaningful in corotating frame)
         self._refresh_lagrange()
 
-        # Polar histogram + stats
+        # Polar histogram + stats + impact traces
         self._refresh_polar(t)
         self._refresh_stats(t)
+        self._refresh_traces(t)
 
         self.time_txt.set_text(f"t = {t / 86400:.2f} days")
         self.fig.canvas.draw_idle()
@@ -532,6 +545,101 @@ class SimViewer:
             ax.text(0.55, y, v, color="white", fontsize=9, transform=ax.transAxes,
                     va="top", family="monospace")
             y -= 0.12
+
+    # ── Impact trajectory traces ─────────────────────────────────────────────
+    def _refresh_traces(self, t_now: float):
+        """Draw complete paths of every impactor that has struck by t_now."""
+        ax = self.ax_traces
+        ax.clear()
+        ax.set_facecolor("#070714")
+        ax.set_aspect("equal")
+        ax.set_title("Impact Trajectories  (corotating)",
+                     color="white", fontsize=8, pad=6)
+        ax.set_xlabel("x  [Earth–Luna dist]", color="#888", fontsize=7)
+        ax.set_ylabel("y  [Earth–Luna dist]", color="#888", fontsize=7)
+        ax.tick_params(colors="#666", labelsize=7)
+        for sp in ax.spines.values():
+            sp.set_color("#333")
+        ax.grid(color="#222", alpha=0.5)
+
+        # Earth and Luna at fixed corotating positions
+        M = EARTH_MASS + LUNA_MASS
+        r_e_c = -(LUNA_MASS * EARTH_LUNA_DIST / M) / D
+        r_l_c =  (EARTH_MASS * EARTH_LUNA_DIST / M) / D
+        bs = self.cfg.body_scale
+        ax.add_patch(Circle((r_e_c, 0), EARTH_RADIUS * bs / D,
+                            color="#4B9CD3", zorder=5))
+        ax.add_patch(Circle((r_l_c, 0), LUNA_RADIUS * bs / D,
+                            color="#C8C8C8", zorder=5))
+        ax.text(r_e_c, EARTH_RADIUS * bs / D * 1.8, "Earth",
+                color="white", fontsize=6, ha="center", va="bottom", zorder=6)
+        ax.text(r_l_c, LUNA_RADIUS * bs / D * 3.0, "Luna",
+                color="white", fontsize=6, ha="center", va="bottom", zorder=6)
+
+        if self.r.ast_pos is None:
+            ax.text(0.5, 0.5, "save_trajectories=False",
+                    color="#888", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=8)
+            ax.set_xlim(-1.6, 1.6); ax.set_ylim(-1.6, 1.6)
+            return
+
+        cutoff = int(np.searchsorted(self._impact_times, t_now, side="right"))
+        seen = self._all_impacts[:cutoff]
+        n_l = n_e = 0
+
+        for rec in seen:
+            i = rec.asteroid_idx
+            t_idx_imp = min(
+                int(np.searchsorted(self.r.times, rec.time, side="right")),
+                len(self.r.times) - 1,
+            )
+            traj = self.r.ast_pos[i, :t_idx_imp + 1, :]
+            valid = ~np.isnan(traj[:, 0])
+            if not valid.any():
+                continue
+
+            valid_idx = np.where(valid)[0]
+            first_v, last_v = int(valid_idx[0]), int(valid_idx[-1])
+            traj_v = traj[first_v:last_v + 1]
+            j_idx = np.clip(np.arange(first_v, last_v + 1),
+                            0, len(self.r.earth_pos) - 1)
+
+            # Always corotate regardless of the main panel's frame setting
+            ep_w = self.r.earth_pos[j_idx]
+            lp_w = self.r.luna_pos[j_idx]
+            th = np.arctan2(lp_w[:, 1] - ep_w[:, 1],
+                            lp_w[:, 0] - ep_w[:, 0])
+            c, s = np.cos(th), np.sin(th)
+            x = c * traj_v[:, 0] + s * traj_v[:, 1]
+            y = -s * traj_v[:, 0] + c * traj_v[:, 1]
+            traj_d = np.column_stack([x, y]) / D
+
+            if rec.body == "luna":
+                color, alpha, n_l = "#FF6B6B", 0.80, n_l + 1
+            else:
+                color, alpha, n_e = "#FFA040", 0.65, n_e + 1
+
+            ax.plot(traj_d[:, 0], traj_d[:, 1],
+                    color=color, lw=0.7, alpha=alpha, zorder=3)
+            ax.plot(traj_d[-1, 0], traj_d[-1, 1], "x",
+                    color=color, ms=7, mew=1.5, zorder=7)
+
+        handles = []
+        if n_l:
+            handles.append(Patch(color="#FF6B6B", label=f"Luna hits ({n_l})"))
+        if n_e:
+            handles.append(Patch(color="#FFA040", label=f"Earth hits ({n_e})"))
+        if handles:
+            ax.legend(handles=handles, loc="upper right",
+                      facecolor="#0D0D1A", edgecolor="#333",
+                      labelcolor="white", fontsize=7)
+        else:
+            ax.text(0.5, 0.5, "no impacts yet", color="#888",
+                    ha="center", va="center",
+                    transform=ax.transAxes, fontsize=9)
+
+        ax.set_xlim(-1.6, 1.6)
+        ax.set_ylim(-1.6, 1.6)
 
     # ── Callbacks ────────────────────────────────────────────────────────
     def _on_slider(self, val):
