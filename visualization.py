@@ -137,6 +137,7 @@ class SimViewer:
         self._show_lagrange = True
         self._show_impacts = True
         self._playing = False
+        self._play_step = 10   # saved frames advanced per timer tick
 
         # Pre-split impacts and pre-sort by time for binary-search filtering
         all_imp = sorted(results.impacts, key=lambda r: r.time)
@@ -277,6 +278,16 @@ class SimViewer:
             lbl.set_color("white"); lbl.set_fontsize(7)
         self.checks.on_clicked(self._on_toggle)
 
+        # Speed slider  (1 – 50 saved-frames per tick)
+        ax_sp = self.fig.add_axes([0.04, 0.01, 0.45, 0.025],
+                                  facecolor="#1A1A2E")
+        self.speed_slider = Slider(ax_sp, "Speed",
+                                   1, 50, valinit=self._play_step,
+                                   valstep=1, color="#C8C8C8")
+        self.speed_slider.label.set_color("white")
+        self.speed_slider.valtext.set_color("white")
+        self.speed_slider.on_changed(self._on_speed)
+
         # Play/pause
         ax_pl = self.fig.add_axes([0.90, 0.05, 0.07, 0.04])
         self.play_btn = Button(ax_pl, "Play", color="#1A1A2E",
@@ -284,7 +295,7 @@ class SimViewer:
         self.play_btn.label.set_color("white")
         self.play_btn.on_clicked(self._on_play)
 
-        self._timer = self.fig.canvas.new_timer(interval=70)
+        self._timer = self.fig.canvas.new_timer(interval=50)
         self._timer.add_callback(self._anim_tick)
 
         self.fig.canvas.mpl_connect("key_press_event", self._on_key)
@@ -548,10 +559,13 @@ class SimViewer:
         else:
             self._timer.stop()
 
+    def _on_speed(self, val):
+        self._play_step = int(val)
+
     def _anim_tick(self):
         if not self._playing:
             return
-        nxt = self.t_idx + 1
+        nxt = self.t_idx + self._play_step
         if nxt >= self.n_saved:
             nxt = 0
         self.slider.eventson = False
@@ -561,11 +575,22 @@ class SimViewer:
 
     def _on_key(self, event):
         if event.key == "right":
-            self._step(+1)
+            self._step(+self._play_step)
         elif event.key == "left":
-            self._step(-1)
+            self._step(-self._play_step)
         elif event.key == " ":
             self._on_play(event)
+        elif event.key in ("]", "=", "+"):
+            self._change_speed(+5)
+        elif event.key in ("[", "-"):
+            self._change_speed(-5)
+
+    def _change_speed(self, delta):
+        new_val = int(np.clip(self._play_step + delta, 1, 50))
+        self._play_step = new_val
+        self.speed_slider.eventson = False
+        self.speed_slider.set_val(new_val)
+        self.speed_slider.eventson = True
 
     def _step(self, delta):
         nxt = int(np.clip(self.t_idx + delta, 0, self.n_saved - 1))
