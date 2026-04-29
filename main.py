@@ -21,10 +21,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--frame", choices=("inertial", "com", "earth", "luna",
                                        "corotating"), default="corotating")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--save-every", type=int, default=None,
+                   help="Save state every N steps (default 10; use 500+ "
+                        "for large-N runs to keep memory manageable)")
     p.add_argument("--luna-target", type=float, default=None,
                    metavar="FRAC",
                    help="Fraction of asteroids biased toward Luna-crossing orbits "
                         "(default 0.3; set 0 to disable)")
+    p.add_argument("--viewer", choices=("matplotlib", "pygame"), default="matplotlib",
+                   help="Viewer backend (default: matplotlib; "
+                        "use pygame for large asteroid counts with zoom/pan)")
     p.add_argument("--no-viewer", action="store_true",
                    help="Skip interactive viewer; show only impact analysis")
     p.add_argument("--no-analysis", action="store_true",
@@ -42,13 +48,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.luna_target is not None:
         cfg_kwargs["luna_target_fraction"] = args.luna_target
+    if args.save_every is not None:
+        cfg_kwargs["save_every"] = args.save_every
     cfg = SimConfig(**cfg_kwargs)
 
     results = run_simulation(cfg)
 
     if not args.no_viewer:
-        viewer = SimViewer(results)
-        viewer.show()
+        if args.viewer == "pygame":
+            from viewer_pygame import PygameViewer
+            PygameViewer(results).run()
+        else:
+            viewer = SimViewer(results)
+            viewer.show()
 
     if not args.no_analysis:
         plot_impact_analysis(results)

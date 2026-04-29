@@ -2,3 +2,4 @@ numpy>=1.24
 matplotlib>=3.7
 scipy>=1.10
 tqdm>=4.65
+pygame>=2.1
