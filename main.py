@@ -21,13 +21,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--frame", choices=("inertial", "com", "earth", "luna",
                                        "corotating"), default="corotating")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--luna-target", type=float, default=None,
+                   metavar="FRAC",
+                   help="Fraction of asteroids biased toward Luna-crossing orbits "
+                        "(default 0.3; set 0 to disable)")
     p.add_argument("--no-viewer", action="store_true",
                    help="Skip interactive viewer; show only impact analysis")
     p.add_argument("--no-analysis", action="store_true",
                    help="Skip impact analysis figure")
     args = p.parse_args(argv)
 
-    cfg = SimConfig(
+    cfg_kwargs: dict = dict(
         n_asteroids=args.n_asteroids,
         duration=args.days * 86400.0,
         dt=args.dt,
@@ -36,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
         reference_frame=args.frame,
         random_seed=args.seed,
     )
+    if args.luna_target is not None:
+        cfg_kwargs["luna_target_fraction"] = args.luna_target
+    cfg = SimConfig(**cfg_kwargs)
 
     results = run_simulation(cfg)
 

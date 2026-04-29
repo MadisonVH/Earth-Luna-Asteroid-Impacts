@@ -28,6 +28,11 @@ class SimConfig:
     # Monte Carlo
     speed_range: Tuple[float, float] = (300.0, 4000.0)   # m/s
     angle_range: Tuple[float, float] = (0.0, 360.0)       # degrees (approach direction)
+    # Fraction of MC asteroids biased toward Luna-crossing trajectories.
+    # For each biased asteroid the impact parameter is drawn near b = -r_L·sin(θ),
+    # which is the straight-line aim point for Luna at approach angle θ.
+    luna_target_fraction: float = 0.3
+    luna_target_sigma: float = 30.0   # spread in units of Luna radii
 
     # Grid (n_asteroids is overridden to n_angles * n_b_vals)
     n_angles: int = 20        # approach directions

@@ -234,6 +234,19 @@ def _init_asteroids(config: SimConfig) -> tuple[np.ndarray, np.ndarray]:
         b = rng.uniform(-config.b_max, config.b_max, n)
         v = rng.uniform(*config.speed_range, n)
 
+        # Bias a fraction of asteroids toward Luna-crossing trajectories.
+        # For approach direction θ, the impact parameter that aims straight at
+        # Luna (at CoM-distance r_L along +x at t=0) is b = −r_L·sin(θ).
+        # We scatter around that value with spread luna_target_sigma × R_Luna.
+        frac = config.luna_target_fraction
+        if frac > 0:
+            n_bias = int(n * frac)
+            if n_bias > 0:
+                r_L = EARTH_MASS * EARTH_LUNA_DIST / (EARTH_MASS + LUNA_MASS)
+                b_luna = -r_L * np.sin(theta[:n_bias])
+                sigma = config.luna_target_sigma * LUNA_RADIUS
+                b[:n_bias] = rng.normal(b_luna, sigma)
+
     elif config.init_mode == "grid":
         thetas_1d = np.linspace(0, 2 * np.pi, config.n_angles, endpoint=False)
         bs_1d = np.linspace(-config.b_max, config.b_max, config.n_b_vals)
