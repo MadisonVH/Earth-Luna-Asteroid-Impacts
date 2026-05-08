@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--viewer", choices=("matplotlib", "pygame"), default="matplotlib",
                    help="Viewer backend (default: matplotlib; "
                         "use pygame for large asteroid counts with zoom/pan)")
+    p.add_argument("--numeric-primaries", action="store_true",
+                   help="Integrate Earth-Luna numerically instead of using the "
+                        "exact trig solution (slower, accumulates error)")
     p.add_argument("--no-viewer", action="store_true",
                    help="Skip interactive viewer; show only impact analysis")
     p.add_argument("--no-analysis", action="store_true",
@@ -50,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg_kwargs["luna_target_fraction"] = args.luna_target
     if args.save_every is not None:
         cfg_kwargs["save_every"] = args.save_every
+    if args.numeric_primaries:
+        cfg_kwargs["analytic_primaries"] = False
     cfg = SimConfig(**cfg_kwargs)
 
     results = run_simulation(cfg)

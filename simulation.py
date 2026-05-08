@@ -299,9 +299,17 @@ def run_simulation(config: SimConfig) -> SimResults:
     n_saved = config.n_saved()
     n_ast = config.effective_n_asteroids()
     dt = config.dt
+    analytic = config.analytic_primaries
+
+    # Pre-compute primary orbital radii for the analytic solution
+    _M = EARTH_MASS + LUNA_MASS
+    _r_E = LUNA_MASS  * EARTH_LUNA_DIST / _M   # Earth distance from CoM
+    _r_L = EARTH_MASS * EARTH_LUNA_DIST / _M   # Luna distance from CoM
+    _omega = EARTH_LUNA_OMEGA
 
     print(f"Sim: {n_steps} steps × {dt:.0f} s dt | "
-          f"{n_ast} asteroids | integrator={config.integrator}")
+          f"{n_ast} asteroids | integrator={config.integrator} | "
+          f"primaries={'analytic' if analytic else 'numeric'}")
 
     # ── Allocate output arrays ───────────────────────────────────────────────
     times = np.empty(n_saved)
@@ -328,7 +336,7 @@ def run_simulation(config: SimConfig) -> SimResults:
     ast_vel = ast_init_vel.copy()
     active = np.ones(n_ast, dtype=bool)
 
-    el_acc = _el_acc(el_pos)
+    el_acc = np.zeros_like(el_pos) if analytic else _el_acc(el_pos)
     ast_acc = _ast_acc(ast_pos, el_pos[0], el_pos[1])
 
     esc_dist2 = config.escape_distance ** 2
@@ -349,10 +357,30 @@ def run_simulation(config: SimConfig) -> SimResults:
     for step in _tqdm(range(1, n_steps + 1), desc="Simulating", unit="step"):
         t = step * dt
 
-        el_pos, el_vel, el_acc, ast_acc = step_fn(
-            el_pos, el_vel, el_acc,
-            ast_pos, ast_vel, ast_acc, active, dt,
-        )
+        if analytic:
+            # Exact circular solution — zero accumulated error for all t
+            _c, _s = np.cos(_omega * t), np.sin(_omega * t)
+            el_pos = np.array([[-_r_E * _c, -_r_E * _s],
+                               [ _r_L * _c,  _r_L * _s]])
+            el_vel = np.array([[ _r_E * _omega * _s, -_r_E * _omega * _c],
+                               [-_r_L * _omega * _s,  _r_L * _omega * _c]])
+            # Asteroid-only Velocity Verlet
+            if active.any():
+                ast_pos[active] += (ast_vel[active] * dt
+                                    + 0.5 * ast_acc[active] * dt ** 2)
+            ast_acc_new = np.zeros_like(ast_acc)
+            if active.any():
+                ast_acc_new[active] = _ast_acc(
+                    ast_pos[active], el_pos[0], el_pos[1])
+            if active.any():
+                ast_vel[active] += 0.5 * (ast_acc[active]
+                                           + ast_acc_new[active]) * dt
+            ast_acc = ast_acc_new
+        else:
+            el_pos, el_vel, el_acc, ast_acc = step_fn(
+                el_pos, el_vel, el_acc,
+                ast_pos, ast_vel, ast_acc, active, dt,
+            )
 
         # ── Impact & escape detection (vectorised over active set) ───────────
         if active.any():

@@ -42,6 +42,13 @@ class SimConfig:
     # ── Integrator ──────────────────────────────────────────────────────────
     # "verlet" (Velocity Verlet, recommended), "euler", "rk4"
     integrator: str = "verlet"
+    # Use the exact trig solution for Earth & Luna instead of numerically
+    # integrating them.  Valid because our ICs are exactly circular (e=0),
+    # so Kepler's parametric equation collapses to:
+    #   earth(t) = (-r_E·cos ωt, -r_E·sin ωt)
+    #   luna(t)  = (+r_L·cos ωt, +r_L·sin ωt)
+    # This gives zero accumulated error in the primary positions for all t.
+    analytic_primaries: bool = True
 
     # ── Reference frame (visualization only) ────────────────────────────────
     # "inertial", "com", "earth", "luna", "corotating"
