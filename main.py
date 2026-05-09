@@ -31,6 +31,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--viewer", choices=("matplotlib", "pygame"), default="matplotlib",
                    help="Viewer backend (default: matplotlib; "
                         "use pygame for large asteroid counts with zoom/pan)")
+    p.add_argument("--release-window", type=float, default=None,
+                   metavar="DAYS",
+                   help="Spread asteroid releases uniformly over this many days "
+                        "(default 0=simultaneous). Use 27.32 to cover one full "
+                        "lunar orbital period.")
     p.add_argument("--numeric-primaries", action="store_true",
                    help="Integrate Earth-Luna numerically instead of using the "
                         "exact trig solution (slower, accumulates error)")
@@ -53,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg_kwargs["luna_target_fraction"] = args.luna_target
     if args.save_every is not None:
         cfg_kwargs["save_every"] = args.save_every
+    if args.release_window is not None:
+        cfg_kwargs["release_window"] = args.release_window * 86400.0
     if args.numeric_primaries:
         cfg_kwargs["analytic_primaries"] = False
     cfg = SimConfig(**cfg_kwargs)

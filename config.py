@@ -24,6 +24,10 @@ class SimConfig:
     b_max: float = 2.0 * EARTH_LUNA_DIST              # m
     # remove asteroid when this far from CoM
     escape_distance: float = 8.0 * EARTH_LUNA_DIST    # m
+    # Spread asteroid release times uniformly over this window (seconds).
+    # 0 = all released simultaneously at t=0.
+    # Set to one lunar period (~2,360,592 s) to sample all orbital phases.
+    release_window: float = 0.0
 
     # Monte Carlo
     speed_range: Tuple[float, float] = (300.0, 4000.0)   # m/s
