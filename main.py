@@ -28,6 +28,10 @@ def main(argv: list[str] | None = None) -> int:
                    metavar="FRAC",
                    help="Fraction of asteroids biased toward Luna-crossing orbits "
                         "(default 0.3; set 0 to disable)")
+    p.add_argument("--speed-range", type=float, nargs=2, default=None,
+                   metavar=("MIN", "MAX"),
+                   help="Asteroid speed range in km/s at source distance "
+                        "(default 5 25).  Example: --speed-range 5 25")
     p.add_argument("--viewer", choices=("matplotlib", "pygame"), default="matplotlib",
                    help="Viewer backend (default: matplotlib; "
                         "use pygame for large asteroid counts with zoom/pan)")
@@ -56,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.luna_target is not None:
         cfg_kwargs["luna_target_fraction"] = args.luna_target
+    if args.speed_range is not None:
+        cfg_kwargs["speed_range"] = (args.speed_range[0] * 1000.0,
+                                     args.speed_range[1] * 1000.0)
     if args.save_every is not None:
         cfg_kwargs["save_every"] = args.save_every
     if args.release_window is not None:

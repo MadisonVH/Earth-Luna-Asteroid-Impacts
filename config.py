@@ -31,7 +31,11 @@ class SimConfig:
     release_window: float = EARTH_LUNA_PERIOD
 
     # Monte Carlo
-    speed_range: Tuple[float, float] = (300.0, 4000.0)   # m/s
+    # Speed at source_distance (= Earth-Moon Hill sphere edge, ~1.5 Mkm).
+    # This is effectively the hyperbolic excess velocity (v_inf) relative to
+    # the E-M system.  Real NEAs: 5–25 km/s.  Former default (300–4000 m/s)
+    # was ~5–50x too slow and put ~18% of asteroids on bound orbits.
+    speed_range: Tuple[float, float] = (5000.0, 25000.0)   # m/s
     angle_range: Tuple[float, float] = (0.0, 360.0)       # degrees (approach direction)
     # Fraction of MC asteroids biased toward Luna-crossing trajectories.
     # For each biased asteroid the impact parameter is drawn near b = -r_L·sin(θ),
