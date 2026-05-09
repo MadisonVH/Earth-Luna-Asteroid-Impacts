@@ -20,6 +20,26 @@ from simulation import SimResults
 
 D = EARTH_LUNA_DIST   # one display unit = mean Earth-Luna distance
 
+# Impact-angle orientation notes (for reference):
+#   angle=0       → Near Side  (Earth-facing hemisphere, tidal-lock face)
+#   angle=±π      → Far Side   (anti-Earth hemisphere)
+#   angle=−π/2    → Leading    (hemisphere facing the direction of Luna's orbital motion)
+#   angle=+π/2    → Trailing   (hemisphere facing opposite to orbital motion)
+# The angle is measured from the INSTANTANEOUS Earth–Luna direction, so tidal
+# locking is implicit — "near-side" always means the same physical face.
+
+
+def _label_polar_directions(ax, rmax: float) -> None:
+    """Annotate a Luna impact polar-histogram with orbital reference labels."""
+    r = max(rmax, 1) * 1.50
+    ax.set_rmax(max(rmax, 1) * 1.65)
+    kw = dict(ha="center", va="center", fontsize=6.5, color="#AAC",
+               fontweight="bold")
+    ax.text(0,          r, "Near\nSide",  **kw)
+    ax.text(np.pi,      r, "Far\nSide",   **kw)
+    ax.text(-np.pi / 2, r, "Leading",     **kw)   # direction of orbital motion
+    ax.text( np.pi / 2, r, "Trailing",    **kw)
+
 
 # ── Reference-frame transforms ──────────────────────────────────────────────
 
@@ -493,8 +513,8 @@ class SimViewer:
         ax.set_theta_direction(1)
         ax.tick_params(colors="#888", labelsize=7)
         ax.grid(color="#333", alpha=0.4)
-        ax.set_title("Luna impact angles  (0° = near-side)",
-                     color="white", fontsize=8, pad=10)
+        ax.set_title("Luna impact angles\n(blue=near · red=far · -90°=leading)",
+                     color="white", fontsize=7.5, pad=10)
 
         if len(self._impact_times) == 0:
             ax.text(0, 0, "no impacts yet", color="#888", ha="center")
@@ -513,6 +533,7 @@ class SimViewer:
         colors = ["#4B9CD3" if abs(c) < np.pi / 2 else "#FF4D4D" for c in centers]
         ax.bar(centers, counts, width=width, color=colors, alpha=0.8,
                edgecolor="#333", linewidth=0.3)
+        _label_polar_directions(ax, int(counts.max()) if counts.size else 1)
 
     # ── Stats panel ──────────────────────────────────────────────────────
     def _refresh_stats(self, t_now):
@@ -524,27 +545,31 @@ class SimViewer:
         n_l = sum(1 for r in seen if r.body == "luna")
         n_e = sum(1 for r in seen if r.body == "earth")
         luna_angs = [r.angle for r in seen if r.body == "luna"]
-        n_near = sum(1 for a in luna_angs if abs(a) < np.pi / 2)
-        n_far = n_l - n_near
+        n_near    = sum(1 for a in luna_angs if abs(a) < np.pi / 2)
+        n_far     = n_l - n_near
+        n_leading  = sum(1 for a in luna_angs if a < 0)   # toward orbital-motion side
+        n_trailing = n_l - n_leading
         n_esc_total = int((self.r.status == 3).sum())
         n_act = self.n_ast - len(seen) - n_esc_total
 
         rows = [
             ("Total asteroids:", f"{self.n_ast}"),
-            ("Luna impacts:",   f"{n_l}  ({100*n_l/max(self.n_ast,1):.1f}%)"),
-            ("  near-side:",    f"{n_near}  ({100*n_near/max(n_l,1):.1f}%)"),
-            ("  far-side:",     f"{n_far}  ({100*n_far/max(n_l,1):.1f}%)"),
-            ("Earth impacts:",  f"{n_e}  ({100*n_e/max(self.n_ast,1):.1f}%)"),
-            ("Active (now):",   f"{max(n_act, 0)}"),
-            ("Escaped (final):",f"{n_esc_total}"),
+            ("Luna impacts:",    f"{n_l}  ({100*n_l/max(self.n_ast,1):.1f}%)"),
+            ("  near-side:",     f"{n_near}  ({100*n_near/max(n_l,1):.1f}%)"),
+            ("  far-side:",      f"{n_far}  ({100*n_far/max(n_l,1):.1f}%)"),
+            ("  leading (-90°):",f"{n_leading}  ({100*n_leading/max(n_l,1):.1f}%)"),
+            ("  trailing(+90°):",f"{n_trailing}  ({100*n_trailing/max(n_l,1):.1f}%)"),
+            ("Earth impacts:",   f"{n_e}  ({100*n_e/max(self.n_ast,1):.1f}%)"),
+            ("Active (now):",    f"{max(n_act, 0)}"),
+            ("Escaped (final):", f"{n_esc_total}"),
         ]
-        y = 0.95
+        y = 0.97
         for k, v in rows:
-            ax.text(0.04, y, k, color="#AAB", fontsize=9, transform=ax.transAxes,
+            ax.text(0.04, y, k, color="#AAB", fontsize=8, transform=ax.transAxes,
                     va="top", family="monospace")
-            ax.text(0.55, y, v, color="white", fontsize=9, transform=ax.transAxes,
+            ax.text(0.58, y, v, color="white", fontsize=8, transform=ax.transAxes,
                     va="top", family="monospace")
-            y -= 0.12
+            y -= 0.097
 
     # ── Impact trajectory traces ─────────────────────────────────────────────
     def _refresh_traces(self, t_now: float):
@@ -726,6 +751,8 @@ def plot_impact_analysis(results: SimResults):
 
     # 1) Polar histogram of Luna impact angles
     ax1 = fig.add_subplot(gs[0, 0], projection="polar", facecolor="#070714")
+    ax1.set_theta_zero_location("E")
+    ax1.set_theta_direction(1)
     if luna:
         a = np.array([r.angle for r in luna])
         bins = np.linspace(-np.pi, np.pi, 37)
@@ -735,9 +762,8 @@ def plot_impact_analysis(results: SimResults):
         colors = ["#4B9CD3" if abs(c) < np.pi / 2 else "#FF4D4D" for c in centers]
         ax1.bar(centers, counts, width=w, color=colors, alpha=0.85,
                 edgecolor="#222", linewidth=0.3)
-        ax1.set_theta_zero_location("E")
-        ax1.set_theta_direction(1)
-    ax1.set_title("Luna impact angles\n(blue=near-side · red=far-side)",
+        _label_polar_directions(ax1, int(counts.max()))
+    ax1.set_title("Luna impact angles\n(blue=near · red=far · −90°=leading)",
                   color="white", fontsize=9, pad=12)
     ax1.tick_params(colors="#888", labelsize=7)
     ax1.grid(color="#333", alpha=0.4)
@@ -781,12 +807,19 @@ def plot_impact_analysis(results: SimResults):
         cb.set_label("initial speed (m/s)", color="#888", fontsize=8)
         cb.ax.yaxis.set_tick_params(color="#888")
         plt.setp(cb.ax.get_yticklabels(), color="#888")
-        ax4.axvline(0, color="#AAB", ls="--", lw=0.7, alpha=0.6)
-        ax4.axvline(-90, color="#445", ls=":", lw=0.6)
-        ax4.axvline(+90, color="#445", ls=":", lw=0.6)
+        ax4.axvline(0,   color="#AAB", ls="--", lw=0.8, alpha=0.7,
+                    label="Near side (0°)")
+        ax4.axvline(-90, color="#6AF", ls=":",  lw=0.9, alpha=0.8,
+                    label="Leading (−90°)")
+        ax4.axvline(+90, color="#FA6", ls=":",  lw=0.9, alpha=0.8,
+                    label="Trailing (+90°)")
+        ax4.legend(fontsize=7, facecolor="#0D0D1A", edgecolor="#333",
+                   labelcolor="white", loc="upper right")
     ax4.set_xlim(-180, 180)
     ax4.set_xticks([-180, -90, 0, 90, 180])
-    ax4.set_xlabel("impact angle (°)  — 0 = near-side, ±180 = far-side",
+    ax4.set_xticklabels(["Far\n−180°", "Leading\n−90°", "Near\n0°",
+                          "Trailing\n+90°", "Far\n+180°"], color="#888", fontsize=7)
+    ax4.set_xlabel("impact angle — 0°=near-side  ±180°=far-side  −90°=leading",
                    color="#888", fontsize=8)
     ax4.set_ylabel("initial speed (m/s)", color="#888", fontsize=8)
     ax4.set_title("Approach speed vs Luna impact angle",
@@ -796,23 +829,29 @@ def plot_impact_analysis(results: SimResults):
     # 5) Summary text
     ax5 = fig.add_subplot(gs[1, 2], facecolor="#070714")
     ax5.axis("off")
-    ang_arr = np.array([r.angle for r in luna]) if luna else np.array([])
-    n_near = int(np.sum(np.abs(ang_arr) < np.pi / 2)) if ang_arr.size else 0
-    n_far = n_luna - n_near
-    asym = (n_near - n_far) / max(n_luna, 1) * 100  # near excess (%)
+    ang_arr   = np.array([r.angle for r in luna]) if luna else np.array([])
+    n_near    = int(np.sum(np.abs(ang_arr) < np.pi / 2)) if ang_arr.size else 0
+    n_far     = n_luna - n_near
+    n_leading  = int(np.sum(ang_arr < 0)) if ang_arr.size else 0
+    n_trailing = n_luna - n_leading
+    near_excess = (n_near    - n_far)     / max(n_luna, 1) * 100
+    lead_excess = (n_leading - n_trailing) / max(n_luna, 1) * 100
     lines = [
-        f"Total asteroids: {n_total}",
-        f"Luna hits:       {n_luna} ({100*n_luna/max(n_total,1):.1f}%)",
-        f"  near-side:     {n_near} ({100*n_near/max(n_luna,1):.1f}%)",
-        f"  far-side:      {n_far} ({100*n_far/max(n_luna,1):.1f}%)",
-        f"  near excess:   {asym:+.1f}%",
-        f"Earth hits:      {n_earth} ({100*n_earth/max(n_total,1):.1f}%)",
-        f"Escaped:         {n_esc} ({100*n_esc/max(n_total,1):.1f}%)",
-        f"Active at end:   {n_act}",
+        f"Total asteroids:  {n_total}",
+        f"Luna hits:        {n_luna} ({100*n_luna/max(n_total,1):.1f}%)",
+        f"  near-side:      {n_near} ({100*n_near/max(n_luna,1):.1f}%)",
+        f"  far-side:       {n_far} ({100*n_far/max(n_luna,1):.1f}%)",
+        f"  near excess:    {near_excess:+.1f}%",
+        f"  leading (-90°): {n_leading} ({100*n_leading/max(n_luna,1):.1f}%)",
+        f"  trailing(+90°): {n_trailing} ({100*n_trailing/max(n_luna,1):.1f}%)",
+        f"  lead excess:    {lead_excess:+.1f}%",
+        f"Earth hits:       {n_earth} ({100*n_earth/max(n_total,1):.1f}%)",
+        f"Escaped:          {n_esc} ({100*n_esc/max(n_total,1):.1f}%)",
+        f"Active at end:    {n_act}",
     ]
     for i, ln in enumerate(lines):
-        ax5.text(0.04, 0.93 - i * 0.105, ln, transform=ax5.transAxes,
-                 color="white", fontsize=9, family="monospace", va="top")
+        ax5.text(0.04, 0.97 - i * 0.083, ln, transform=ax5.transAxes,
+                 color="white", fontsize=8, family="monospace", va="top")
     ax5.set_title("Summary", color="white", fontsize=9)
 
     plt.show()

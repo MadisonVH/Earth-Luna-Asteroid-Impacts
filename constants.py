@@ -15,7 +15,9 @@ LUNA_COLOR = "#C8C8C8"
 # System geometry
 EARTH_LUNA_DIST = 3.844e8  # m, mean Earth–Moon distance (semi-major axis)
 
-# Derived: circular-orbit angular velocity
+# Derived: circular-orbit angular velocity and period
 import math
 EARTH_LUNA_OMEGA = math.sqrt(G * (EARTH_MASS + LUNA_MASS) / EARTH_LUNA_DIST**3)
 # ≈ 2.665e-6 rad/s  →  period ≈ 27.32 days ✓
+EARTH_LUNA_PERIOD = 2 * math.pi / EARTH_LUNA_OMEGA
+# ≈ 2,360,582 s (27.32 days) — one full sidereal month
