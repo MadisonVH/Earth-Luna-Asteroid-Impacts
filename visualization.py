@@ -735,124 +735,222 @@ class SimViewer:
 
 # ── Standalone analysis figure ──────────────────────────────────────────────
 
+def _draw_traj_panel(ax, cfg, trajs, luna_recs, earth_recs):
+    """Full trajectory panel: all impactor paths in the corotating frame."""
+    ax.set_facecolor("#070714")
+    ax.set_aspect("equal")
+    ax.set_title(
+        "Impact Trajectories  (corotating frame)\n"
+        "Use toolbar below to zoom / pan",
+        color="white", fontsize=9, pad=6,
+    )
+    ax.set_xlabel("x  [Earth–Luna distances]", color="#888", fontsize=8)
+    ax.set_ylabel("y  [Earth–Luna distances]", color="#888", fontsize=8)
+    ax.tick_params(colors="#666", labelsize=7)
+    for sp in ax.spines.values():
+        sp.set_color("#333")
+    ax.grid(color="#222", alpha=0.45, zorder=1)
+
+    # Bodies at fixed corotating positions
+    M = EARTH_MASS + LUNA_MASS
+    r_e_c = -(LUNA_MASS  * EARTH_LUNA_DIST / M) / D
+    r_l_c = +(EARTH_MASS * EARTH_LUNA_DIST / M) / D
+    bs = cfg.body_scale
+    ax.add_patch(Circle((r_e_c, 0), EARTH_RADIUS * bs / D,
+                        color="#4B9CD3", zorder=5))
+    ax.add_patch(Circle((r_l_c, 0), LUNA_RADIUS  * bs / D,
+                        color="#C8C8C8", zorder=5))
+    ax.text(r_e_c, EARTH_RADIUS * bs / D * 2.2, "Earth",
+            color="white", fontsize=7, ha="center", va="bottom", zorder=6)
+    ax.text(r_l_c, LUNA_RADIUS  * bs / D * 3.5, "Luna",
+            color="white", fontsize=7, ha="center", va="bottom", zorder=6)
+
+    all_x: list = []
+    all_y: list = []
+    n_l = n_e = 0
+
+    for traj in trajs["luna"]:
+        if traj is None or len(traj) < 2:
+            continue
+        td = traj / D
+        ax.plot(td[:, 0], td[:, 1], color="#FF6B6B", lw=0.55, alpha=0.70, zorder=3)
+        ax.plot(td[-1, 0], td[-1, 1], "x",
+                color="#FF4D4D", ms=5, mew=1.4, zorder=7)
+        all_x.append(td[:, 0]); all_y.append(td[:, 1])
+        n_l += 1
+
+    for traj in trajs["earth"]:
+        if traj is None or len(traj) < 2:
+            continue
+        td = traj / D
+        ax.plot(td[:, 0], td[:, 1], color="#FFA040", lw=0.55, alpha=0.60, zorder=3)
+        ax.plot(td[-1, 0], td[-1, 1], "x",
+                color="#FF8C1A", ms=5, mew=1.4, zorder=7)
+        all_x.append(td[:, 0]); all_y.append(td[:, 1])
+        n_e += 1
+
+    if all_x:
+        xarr = np.concatenate(all_x)
+        yarr = np.concatenate(all_y)
+        xspan = max(xarr.max() - xarr.min(), 0.5)
+        yspan = max(yarr.max() - yarr.min(), 0.5)
+        pad = max(xspan, yspan) * 0.06
+        ax.set_xlim(xarr.min() - pad, xarr.max() + pad)
+        ax.set_ylim(yarr.min() - pad, yarr.max() + pad)
+    else:
+        ax.set_xlim(-1.6, 1.6)
+        ax.set_ylim(-1.6, 1.6)
+        ax.text(0.5, 0.5, "no impacts", color="#888",
+                ha="center", va="center", transform=ax.transAxes, fontsize=11)
+
+    handles = []
+    if n_l:
+        handles.append(Patch(color="#FF6B6B", label=f"Luna hits ({n_l})"))
+    if n_e:
+        handles.append(Patch(color="#FFA040", label=f"Earth hits ({n_e})"))
+    if handles:
+        ax.legend(handles=handles, loc="upper right",
+                  facecolor="#0D0D1A", edgecolor="#444",
+                  labelcolor="white", fontsize=8)
+
+
+def _draw_luna_surface_panel(ax, luna_recs):
+    """Luna surface close-up with impact dots at their surface positions."""
+    ax.set_facecolor("#070714")
+    ax.set_aspect("equal")
+    ax.set_title("Luna surface impacts", color="white", fontsize=8, pad=5)
+    for sp in ax.spines.values():
+        sp.set_color("#333")
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # Luna disk
+    ax.add_patch(Circle((0, 0), 1.0, color="#1C1C2E", zorder=2))
+    ax.add_patch(Circle((0, 0), 1.0, color="#C8C8C8", fill=False,
+                         lw=1.5, zorder=3))
+
+    # Impact dots: angle θ → surface point (-cos θ, -sin θ)
+    if luna_recs:
+        ang = np.array([r.angle for r in luna_recs])
+        sx = -np.cos(ang)
+        sy = -np.sin(ang)
+        near = np.abs(ang) < np.pi / 2
+        ax.scatter(sx[near],  sy[near],  s=14, c="#4B9CD3", alpha=0.85,
+                   zorder=5, label="near")
+        ax.scatter(sx[~near], sy[~near], s=14, c="#FF6B6B", alpha=0.85,
+                   zorder=5, label="far")
+        ax.legend(loc="lower right", facecolor="#0D0D1A", edgecolor="#444",
+                  labelcolor="white", fontsize=6, markerscale=0.9)
+
+    # Cardinal labels  (near=−x, far=+x, leading=+y, trailing=−y)
+    kw = dict(ha="center", va="center", fontsize=6.5,
+              color="#AAC", fontweight="bold")
+    ax.text(-1.52,  0.0,  "Near",     **kw)
+    ax.text(+1.52,  0.0,  "Far",      **kw)
+    ax.text( 0.0,  +1.52, "Leading",  **kw)
+    ax.text( 0.0,  -1.52, "Trailing", **kw)
+
+    ax.set_xlim(-1.85, 1.85)
+    ax.set_ylim(-1.85, 1.85)
+
+
+def _draw_polar_panel(ax, luna_recs):
+    """Polar histogram of Luna impact angles."""
+    ax.set_facecolor("#070714")
+    ax.set_theta_zero_location("E")
+    ax.set_theta_direction(1)
+    ax.tick_params(colors="#888", labelsize=7)
+    ax.grid(color="#333", alpha=0.4)
+    ax.set_title("Luna impact angles\n(blue=near · red=far · −90°=leading)",
+                 color="white", fontsize=7.5, pad=10)
+
+    if not luna_recs:
+        ax.text(0, 0, "no Luna impacts", color="#888", ha="center")
+        return
+
+    ang = np.array([r.angle for r in luna_recs])
+    bins = np.linspace(-np.pi, np.pi, 37)
+    counts, _ = np.histogram(ang, bins=bins)
+    centers = 0.5 * (bins[:-1] + bins[1:])
+    width = bins[1] - bins[0]
+    colors = ["#4B9CD3" if abs(c) < np.pi / 2 else "#FF4D4D" for c in centers]
+    ax.bar(centers, counts, width=width, color=colors, alpha=0.85,
+           edgecolor="#222", linewidth=0.3)
+    _label_polar_directions(ax, int(counts.max()) if counts.size else 1)
+
+
+def _draw_stats_panel(ax, n_total, n_luna, n_earth, n_esc, n_act, luna_recs):
+    """Text summary panel."""
+    ax.set_facecolor("#070714")
+    ax.axis("off")
+    ax.set_title("Summary", color="white", fontsize=8, pad=4)
+
+    ang_arr    = np.array([r.angle for r in luna_recs]) if luna_recs else np.array([])
+    n_near     = int(np.sum(np.abs(ang_arr) < np.pi / 2)) if ang_arr.size else 0
+    n_far      = n_luna - n_near
+    n_leading  = int(np.sum(ang_arr < 0)) if ang_arr.size else 0
+    n_trailing = n_luna - n_leading
+    near_excess = (n_near    - n_far)          / max(n_luna, 1) * 100
+    lead_excess = (n_leading - n_trailing)     / max(n_luna, 1) * 100
+
+    rows = [
+        ("Total:",            f"{n_total}"),
+        ("Luna hits:",        f"{n_luna} ({100*n_luna/max(n_total,1):.1f}%)"),
+        ("  near-side:",      f"{n_near} ({100*n_near/max(n_luna,1):.1f}%)"),
+        ("  far-side:",       f"{n_far} ({100*n_far/max(n_luna,1):.1f}%)"),
+        ("  near excess:",    f"{near_excess:+.1f}%"),
+        ("  leading(-90°):",  f"{n_leading} ({100*n_leading/max(n_luna,1):.1f}%)"),
+        ("  trailing(+90°):", f"{n_trailing} ({100*n_trailing/max(n_luna,1):.1f}%)"),
+        ("  lead excess:",    f"{lead_excess:+.1f}%"),
+        ("Earth hits:",       f"{n_earth} ({100*n_earth/max(n_total,1):.1f}%)"),
+        ("Escaped:",          f"{n_esc} ({100*n_esc/max(n_total,1):.1f}%)"),
+        ("Active at end:",    f"{n_act}"),
+    ]
+    y = 0.97
+    step = 0.086
+    for k, v in rows:
+        ax.text(0.02, y, k, color="#AAB", fontsize=7.5, transform=ax.transAxes,
+                va="top", family="monospace")
+        ax.text(0.60, y, v, color="white", fontsize=7.5, transform=ax.transAxes,
+                va="top", family="monospace")
+        y -= step
+
+
 def plot_impact_analysis(results: SimResults):
-    """One static figure summarising impact statistics (call after the sim)."""
-    luna = [r for r in results.impacts if r.body == "luna"]
-    earth = [r for r in results.impacts if r.body == "earth"]
+    """Post-simulation figure: interactive trajectory panel + direction stats."""
+    from simulation import reintegrate_impactors
+
+    luna_recs  = [r for r in results.impacts if r.body == "luna"]
+    earth_recs = [r for r in results.impacts if r.body == "earth"]
     n_total = results.ast_init_pos.shape[0]
-    n_luna, n_earth = len(luna), len(earth)
+    n_luna, n_earth = len(luna_recs), len(earth_recs)
     n_esc = int((results.status == 3).sum())
     n_act = int((results.status == 0).sum())
 
-    fig = plt.figure(figsize=(13, 8), facecolor="#0D0D1A")
-    fig.suptitle("Impact Analysis", color="white", fontsize=12)
-    gs = GridSpec(2, 3, figure=fig, hspace=0.45, wspace=0.35,
-                  left=0.06, right=0.97, top=0.92, bottom=0.08)
+    # Re-integrate only impacting asteroids post-hoc (memory ∝ hits, not N)
+    trajs = reintegrate_impactors(results)
 
-    # 1) Polar histogram of Luna impact angles
-    ax1 = fig.add_subplot(gs[0, 0], projection="polar", facecolor="#070714")
-    ax1.set_theta_zero_location("E")
-    ax1.set_theta_direction(1)
-    if luna:
-        a = np.array([r.angle for r in luna])
-        bins = np.linspace(-np.pi, np.pi, 37)
-        counts, _ = np.histogram(a, bins=bins)
-        centers = 0.5 * (bins[:-1] + bins[1:])
-        w = bins[1] - bins[0]
-        colors = ["#4B9CD3" if abs(c) < np.pi / 2 else "#FF4D4D" for c in centers]
-        ax1.bar(centers, counts, width=w, color=colors, alpha=0.85,
-                edgecolor="#222", linewidth=0.3)
-        _label_polar_directions(ax1, int(counts.max()))
-    ax1.set_title("Luna impact angles\n(blue=near · red=far · −90°=leading)",
-                  color="white", fontsize=9, pad=12)
-    ax1.tick_params(colors="#888", labelsize=7)
-    ax1.grid(color="#333", alpha=0.4)
+    fig = plt.figure(figsize=(18, 10), facecolor="#0D0D1A")
+    fig.suptitle("Impact Analysis", color="white", fontsize=13, y=0.98)
 
-    # 2) Impact time histogram
-    ax2 = fig.add_subplot(gs[0, 1], facecolor="#070714")
-    if luna:
-        ax2.hist([r.time / 86400 for r in luna], bins=30,
-                 color="#C8C8C8", alpha=0.85, edgecolor="#333")
-    ax2.set_title("Luna impact times", color="white", fontsize=9)
-    ax2.set_xlabel("days", color="#888", fontsize=8)
-    ax2.set_ylabel("count", color="#888", fontsize=8)
-    _style_axes(ax2)
+    gs = GridSpec(
+        3, 2, figure=fig,
+        width_ratios=[3, 1], height_ratios=[2.2, 1.5, 1.0],
+        hspace=0.38, wspace=0.22,
+        left=0.05, right=0.97, top=0.93, bottom=0.05,
+    )
 
-    # 3) Outcome pie
-    ax3 = fig.add_subplot(gs[0, 2], facecolor="#070714")
-    sizes = [n_luna, n_earth, n_esc, n_act]
-    labels = ["Luna", "Earth", "Escaped", "Active"]
-    cols = ["#C8C8C8", "#4B9CD3", "#666", "#FFC34A"]
-    nz = [(s, l, c) for s, l, c in zip(sizes, labels, cols) if s > 0]
-    if nz:
-        s, l, c = zip(*nz)
-        wedges, texts, autotexts = ax3.pie(
-            s, labels=l, colors=c, autopct="%1.1f%%",
-            textprops={"color": "white", "fontsize": 8},
-            wedgeprops={"edgecolor": "#222", "linewidth": 0.5},
-        )
-        for at in autotexts:
-            at.set_color("#222")
-    ax3.set_title("Outcomes", color="white", fontsize=9)
+    ax_traj  = fig.add_subplot(gs[:, 0])           # left column — trajectories
+    ax_luna  = fig.add_subplot(gs[0, 1])            # top-right — surface map
+    ax_polar = fig.add_subplot(gs[1, 1],            # mid-right  — polar hist
+                               projection="polar",
+                               facecolor="#070714")
+    ax_stats = fig.add_subplot(gs[2, 1])            # bot-right  — stats
 
-    # 4) Approach speed vs impact angle (scatter, coloured by speed)
-    ax4 = fig.add_subplot(gs[1, :2], facecolor="#070714")
-    if luna:
-        speeds_init = np.linalg.norm(results.ast_init_vel, axis=1)
-        ang_deg = [np.degrees(r.angle) for r in luna]
-        spd = [speeds_init[r.asteroid_idx] for r in luna]
-        sc = ax4.scatter(ang_deg, spd, c=spd, cmap="plasma", s=14,
-                         alpha=0.8, zorder=3)
-        cb = plt.colorbar(sc, ax=ax4)
-        cb.set_label("initial speed (m/s)", color="#888", fontsize=8)
-        cb.ax.yaxis.set_tick_params(color="#888")
-        plt.setp(cb.ax.get_yticklabels(), color="#888")
-        ax4.axvline(0,   color="#AAB", ls="--", lw=0.8, alpha=0.7,
-                    label="Near side (0°)")
-        ax4.axvline(-90, color="#6AF", ls=":",  lw=0.9, alpha=0.8,
-                    label="Leading (−90°)")
-        ax4.axvline(+90, color="#FA6", ls=":",  lw=0.9, alpha=0.8,
-                    label="Trailing (+90°)")
-        ax4.legend(fontsize=7, facecolor="#0D0D1A", edgecolor="#333",
-                   labelcolor="white", loc="upper right")
-    ax4.set_xlim(-180, 180)
-    ax4.set_xticks([-180, -90, 0, 90, 180])
-    ax4.set_xticklabels(["Far\n−180°", "Leading\n−90°", "Near\n0°",
-                          "Trailing\n+90°", "Far\n+180°"], color="#888", fontsize=7)
-    ax4.set_xlabel("impact angle — 0°=near-side  ±180°=far-side  −90°=leading",
-                   color="#888", fontsize=8)
-    ax4.set_ylabel("initial speed (m/s)", color="#888", fontsize=8)
-    ax4.set_title("Approach speed vs Luna impact angle",
-                  color="white", fontsize=9)
-    _style_axes(ax4)
-
-    # 5) Summary text
-    ax5 = fig.add_subplot(gs[1, 2], facecolor="#070714")
-    ax5.axis("off")
-    ang_arr   = np.array([r.angle for r in luna]) if luna else np.array([])
-    n_near    = int(np.sum(np.abs(ang_arr) < np.pi / 2)) if ang_arr.size else 0
-    n_far     = n_luna - n_near
-    n_leading  = int(np.sum(ang_arr < 0)) if ang_arr.size else 0
-    n_trailing = n_luna - n_leading
-    near_excess = (n_near    - n_far)     / max(n_luna, 1) * 100
-    lead_excess = (n_leading - n_trailing) / max(n_luna, 1) * 100
-    lines = [
-        f"Total asteroids:  {n_total}",
-        f"Luna hits:        {n_luna} ({100*n_luna/max(n_total,1):.1f}%)",
-        f"  near-side:      {n_near} ({100*n_near/max(n_luna,1):.1f}%)",
-        f"  far-side:       {n_far} ({100*n_far/max(n_luna,1):.1f}%)",
-        f"  near excess:    {near_excess:+.1f}%",
-        f"  leading (-90°): {n_leading} ({100*n_leading/max(n_luna,1):.1f}%)",
-        f"  trailing(+90°): {n_trailing} ({100*n_trailing/max(n_luna,1):.1f}%)",
-        f"  lead excess:    {lead_excess:+.1f}%",
-        f"Earth hits:       {n_earth} ({100*n_earth/max(n_total,1):.1f}%)",
-        f"Escaped:          {n_esc} ({100*n_esc/max(n_total,1):.1f}%)",
-        f"Active at end:    {n_act}",
-    ]
-    for i, ln in enumerate(lines):
-        ax5.text(0.04, 0.97 - i * 0.083, ln, transform=ax5.transAxes,
-                 color="white", fontsize=8, family="monospace", va="top")
-    ax5.set_title("Summary", color="white", fontsize=9)
+    _draw_traj_panel(ax_traj, results.config, trajs, luna_recs, earth_recs)
+    _draw_luna_surface_panel(ax_luna, luna_recs)
+    _draw_polar_panel(ax_polar, luna_recs)
+    _draw_stats_panel(ax_stats, n_total, n_luna, n_earth, n_esc, n_act, luna_recs)
 
     plt.show()
 
