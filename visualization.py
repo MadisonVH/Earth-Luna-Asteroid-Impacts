@@ -773,30 +773,37 @@ def _draw_traj_panel(ax, cfg, trajs, luna_recs, earth_recs):
         if traj is None or len(traj) < 2:
             continue
         td = traj / D
+        fin = np.isfinite(td[:, 0]) & np.isfinite(td[:, 1])
+        if not fin.any():
+            continue
+        # NaN rows become natural line breaks in matplotlib — keep them for plot
         ax.plot(td[:, 0], td[:, 1], color="#FF6B6B", lw=0.55, alpha=0.70, zorder=3)
-        ax.plot(td[-1, 0], td[-1, 1], "x",
-                color="#FF4D4D", ms=5, mew=1.4, zorder=7)
-        all_x.append(td[:, 0]); all_y.append(td[:, 1])
+        last = td[fin][-1]
+        ax.plot(last[0], last[1], "x", color="#FF4D4D", ms=5, mew=1.4, zorder=7)
+        all_x.append(td[fin, 0]); all_y.append(td[fin, 1])
         n_l += 1
 
     for traj in trajs["earth"]:
         if traj is None or len(traj) < 2:
             continue
         td = traj / D
+        fin = np.isfinite(td[:, 0]) & np.isfinite(td[:, 1])
+        if not fin.any():
+            continue
         ax.plot(td[:, 0], td[:, 1], color="#FFA040", lw=0.55, alpha=0.60, zorder=3)
-        ax.plot(td[-1, 0], td[-1, 1], "x",
-                color="#FF8C1A", ms=5, mew=1.4, zorder=7)
-        all_x.append(td[:, 0]); all_y.append(td[:, 1])
+        last = td[fin][-1]
+        ax.plot(last[0], last[1], "x", color="#FF8C1A", ms=5, mew=1.4, zorder=7)
+        all_x.append(td[fin, 0]); all_y.append(td[fin, 1])
         n_e += 1
 
     if all_x:
         xarr = np.concatenate(all_x)
         yarr = np.concatenate(all_y)
-        xspan = max(xarr.max() - xarr.min(), 0.5)
-        yspan = max(yarr.max() - yarr.min(), 0.5)
+        xspan = max(float(xarr.max() - xarr.min()), 0.5)
+        yspan = max(float(yarr.max() - yarr.min()), 0.5)
         pad = max(xspan, yspan) * 0.06
-        ax.set_xlim(xarr.min() - pad, xarr.max() + pad)
-        ax.set_ylim(yarr.min() - pad, yarr.max() + pad)
+        ax.set_xlim(float(xarr.min()) - pad, float(xarr.max()) + pad)
+        ax.set_ylim(float(yarr.min()) - pad, float(yarr.max()) + pad)
     else:
         ax.set_xlim(-1.6, 1.6)
         ax.set_ylim(-1.6, 1.6)
