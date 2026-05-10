@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.patches import Circle, Patch
 from matplotlib.widgets import Slider, RadioButtons, CheckButtons, Button
-from matplotlib.gridspec import GridSpec
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 from constants import (G, EARTH_MASS, EARTH_RADIUS, LUNA_MASS, LUNA_RADIUS,
                        EARTH_LUNA_DIST)
@@ -923,6 +923,43 @@ def _draw_stats_panel(ax, n_total, n_luna, n_earth, n_esc, n_act, luna_recs):
         y -= step
 
 
+def _draw_velocity_panel(ax, results: SimResults, luna_recs: list):
+    """Approach speed vs Luna impact angle scatter, coloured by speed."""
+    ax.set_facecolor("#070714")
+    ax.set_title("Approach speed vs impact angle",
+                 color="white", fontsize=8, pad=5)
+    ax.set_xlabel(
+        "impact angle   (0°=near · ±180°=far · −90°=leading)",
+        color="#888", fontsize=7,
+    )
+    ax.set_ylabel("initial speed  (km/s)", color="#888", fontsize=7)
+    ax.tick_params(colors="#666", labelsize=7)
+    for sp in ax.spines.values():
+        sp.set_color("#333")
+    ax.grid(color="#222", alpha=0.4, zorder=1)
+
+    if luna_recs:
+        speeds_km = np.linalg.norm(results.ast_init_vel, axis=1) / 1000.0
+        ang_deg   = np.degrees([r.angle for r in luna_recs])
+        spd       = np.array([speeds_km[r.asteroid_idx] for r in luna_recs])
+        sc = ax.scatter(ang_deg, spd, c=spd, cmap="plasma", s=10,
+                        alpha=0.80, zorder=3)
+        cb = plt.colorbar(sc, ax=ax, pad=0.02, shrink=0.85)
+        cb.set_label("km/s", color="#888", fontsize=7)
+        cb.ax.yaxis.set_tick_params(color="#888", labelsize=6)
+        plt.setp(cb.ax.get_yticklabels(), color="#888")
+        for xv, col in [(0, "#AAB"), (-90, "#6AF"), (90, "#FA6")]:
+            ax.axvline(xv, color=col, ls="--", lw=0.8, alpha=0.55, zorder=2)
+
+    ax.set_xlim(-180, 180)
+    ax.set_xticks([-180, -90, 0, 90, 180])
+    ax.set_xticklabels(
+        ["Far\n−180°", "Leading\n−90°", "Near\n0°",
+         "Trailing\n+90°", "Far\n+180°"],
+        color="#888", fontsize=6.5,
+    )
+
+
 def plot_impact_analysis(results: SimResults):
     """Post-simulation figure: interactive trajectory panel + direction stats."""
     from simulation import reintegrate_impactors
@@ -937,24 +974,35 @@ def plot_impact_analysis(results: SimResults):
     # Re-integrate only impacting asteroids post-hoc (memory ∝ hits, not N)
     trajs = reintegrate_impactors(results)
 
-    fig = plt.figure(figsize=(18, 10), facecolor="#0D0D1A")
+    fig = plt.figure(figsize=(20, 11), facecolor="#0D0D1A")
     fig.suptitle("Impact Analysis", color="white", fontsize=13, y=0.98)
 
+    # Two main columns: trajectories (wide left) | stats panels (narrow right)
     gs = GridSpec(
-        3, 2, figure=fig,
-        width_ratios=[3, 1], height_ratios=[2.2, 1.5, 1.0],
-        hspace=0.38, wspace=0.22,
+        1, 2, figure=fig,
+        width_ratios=[3, 1], wspace=0.22,
         left=0.05, right=0.97, top=0.93, bottom=0.05,
     )
+    # Left column: trajectory on top, velocity scatter on bottom
+    gs_left = GridSpecFromSubplotSpec(
+        2, 1, subplot_spec=gs[0, 0],
+        height_ratios=[3.5, 1.0], hspace=0.38,
+    )
+    # Right column: Luna surface map | polar histogram | stats text
+    gs_right = GridSpecFromSubplotSpec(
+        3, 1, subplot_spec=gs[0, 1],
+        height_ratios=[2.2, 1.5, 1.0], hspace=0.48,
+    )
 
-    ax_traj  = fig.add_subplot(gs[:, 0])           # left column — trajectories
-    ax_luna  = fig.add_subplot(gs[0, 1])            # top-right — surface map
-    ax_polar = fig.add_subplot(gs[1, 1],            # mid-right  — polar hist
-                               projection="polar",
+    ax_traj  = fig.add_subplot(gs_left[0])
+    ax_vel   = fig.add_subplot(gs_left[1])
+    ax_luna  = fig.add_subplot(gs_right[0])
+    ax_polar = fig.add_subplot(gs_right[1], projection="polar",
                                facecolor="#070714")
-    ax_stats = fig.add_subplot(gs[2, 1])            # bot-right  — stats
+    ax_stats = fig.add_subplot(gs_right[2])
 
     _draw_traj_panel(ax_traj, results.config, trajs, luna_recs, earth_recs)
+    _draw_velocity_panel(ax_vel, results, luna_recs)
     _draw_luna_surface_panel(ax_luna, luna_recs)
     _draw_polar_panel(ax_polar, luna_recs)
     _draw_stats_panel(ax_stats, n_total, n_luna, n_earth, n_esc, n_act, luna_recs)

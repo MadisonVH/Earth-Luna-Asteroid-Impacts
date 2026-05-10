@@ -1,4 +1,4 @@
-"""Entry point: run a sim and open the interactive viewer."""
+"""Entry point: show config GUI (no CLI args) or parse args, then run sim."""
 
 from __future__ import annotations
 import argparse
@@ -9,7 +9,29 @@ from simulation import run_simulation
 from visualization import SimViewer, plot_impact_analysis
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_config_from_gui() -> tuple:
+    """Show config GUI; return (cfg, viewer, no_viewer, no_analysis)."""
+    try:
+        from launch_gui import show_config_gui
+    except Exception:
+        print("Warning: tkinter unavailable — falling back to CLI defaults.")
+        return SimConfig(), "matplotlib", False, False
+
+    gui = show_config_gui()
+    if gui is None:
+        return None, "", False, False     # user cancelled
+
+    viewer      = gui.pop("_viewer", "matplotlib")
+    no_analysis = bool(gui.pop("_no_analysis", False))
+    no_viewer   = (viewer == "none")
+    if no_viewer:
+        viewer = "matplotlib"
+
+    return SimConfig(**gui), viewer, no_viewer, no_analysis
+
+
+def _build_config_from_args(argv) -> tuple:
+    """Parse CLI arguments; return (cfg, viewer, no_viewer, no_analysis)."""
     p = argparse.ArgumentParser(description="Earth-Luna asteroid impact sim")
     p.add_argument("-n", "--n-asteroids", type=int, default=500)
     p.add_argument("-d", "--days", type=float, default=30.0,
@@ -69,19 +91,29 @@ def main(argv: list[str] | None = None) -> int:
         cfg_kwargs["release_window"] = args.release_window * 86400.0
     if args.numeric_primaries:
         cfg_kwargs["analytic_primaries"] = False
-    cfg = SimConfig(**cfg_kwargs)
+
+    return SimConfig(**cfg_kwargs), args.viewer, args.no_viewer, args.no_analysis
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Show GUI when run interactively with no CLI arguments
+    if argv is None and len(sys.argv) == 1:
+        cfg, viewer, no_viewer, no_analysis = _build_config_from_gui()
+        if cfg is None:
+            return 0   # user clicked Cancel
+    else:
+        cfg, viewer, no_viewer, no_analysis = _build_config_from_args(argv)
 
     results = run_simulation(cfg)
 
-    if not args.no_viewer:
-        if args.viewer == "pygame":
+    if not no_viewer:
+        if viewer == "pygame":
             from viewer_pygame import PygameViewer
             PygameViewer(results).run()
         else:
-            viewer = SimViewer(results)
-            viewer.show()
+            SimViewer(results).show()
 
-    if not args.no_analysis:
+    if not no_analysis:
         plot_impact_analysis(results)
 
     return 0
